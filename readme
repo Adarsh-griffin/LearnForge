@@ -1,1 +1,512 @@
-# LearnForge-
+# 🎓 LearnForge: AI-Powered Tutoring & Adaptive Learning Platform
+
+> **Turn any textbook, PDF, or topic into a living, voice-driven, 3D-avatar-led learning experience, in seconds.**
+
+LearnForge is an end-to-end, **multi-modal, retrieval-augmented AI education platform** that converts static learning material (PDFs, textbooks, free-form topic inputs) into an interactive, tutor-led curriculum. It fuses **Retrieval-Augmented Generation (RAG)**, **ultra-low-latency LLM inference on Groq (LLaMA 3 8B & 70B)**, **speech-to-text (Whisper)**, **neural text-to-speech (GCP Studio Voices)**, a **fully client-side real-time 3D talking avatar (Three.js + Web Audio API)**, and **web-scraped resource enrichment (Serper)** into a single cohesive, cloud-deployable product.
+
+---
+
+## 📑 Table of Contents
+
+1. [Problem Statement](#-problem-statement)
+2. [Our Solution](#-our-solution)
+3. [Key Features](#-key-features)
+4. [System Architecture](#-system-architecture)
+5. [End-to-End Data Flow](#-end-to-end-data-flow)
+6. [Deep Dive: Core Technical Innovations](#-deep-dive-core-technical-innovations)
+7. [Tech Stack](#️-tech-stack)
+8. [Repositories](#-repositories)
+9. [Environment Configuration](#️-environment-configuration)
+10. [Setup & Installation](#-setup--installation)
+11. [How to Use](#-how-to-run--use-the-application)
+12. [Deployment Guide (Render)](#-deployment-guide-render)
+13. [Design Decisions & Trade-offs](#-design-decisions--trade-offs)
+14. [Security & Privacy](#-security--privacy)
+15. [Scalability & Performance](#-scalability--performance)
+16. [Roadmap](#-roadmap)
+17. [License](#-license)
+
+---
+
+## 🎯 Problem Statement
+
+Traditional digital learning suffers from four systemic gaps:
+
+| Gap | Impact |
+| :--- | :--- |
+| **Static content** | PDFs and textbooks are passive, non-interactive, and one-size-fits-all. |
+| **No personalized pacing** | Learners cannot get instant, context-aware answers to follow-up questions. |
+| **Low engagement** | Text-only interfaces lack the human presence of a real tutor. |
+| **No feedback loop** | Learners rarely get diagnostic assessment tied directly to *what they just studied*. |
+
+## 💡 Our Solution
+
+LearnForge closes these gaps with a **grounded, multi-modal AI tutor**:
+
+- **Grounded** in the learner's *own* material via RAG, which reduces LLM hallucination.
+- **Fast** thanks to Groq's LPU-accelerated inference, so responses feel conversational.
+- **Embodied** through a 3D avatar that speaks with real-time, audio-reactive lip-sync.
+- **Adaptive** through diagnostic quizzes, evaluation, and targeted improvement pointers.
+- **Enriched** with curated real-world resources scraped from top educational portals.
+
+---
+
+## 🌟 Key Features
+
+### 1. 📄 Document Ingestion & Curriculum Generation
+- Ingests uploaded **PDF textbooks** or user-provided **topic prompts** (e.g., *Convolutional Neural Networks*).
+- Automatically produces a **hierarchical subtopic tree**, **concept roadmap**, and **structured summary explanations**.
+- Uses **vectorless, reasoning-based retrieval (PageIndex)** to build a document tree index instead of relying on chunk-and-embed pipelines.
+
+### 2. 🗣️ Interactive AI Tutor (Voice + Text)
+- Conversational Q&A grounded in retrieved document context (**RAG pipeline**).
+- Powered by **Groq-hosted LLaMA 3 (8B for low-latency tasks, 70B for deep reasoning)** with sub-second time-to-first-token.
+- **Hands-free voice interaction** through **Groq Whisper (STT)**.
+
+### 3. 🧑‍🏫 Real-Time 3D Talking Avatar
+- **Fully client-side** rendering with **Three.js** and **GLTF/GLB** models, so no server-side video rendering is needed.
+- **Procedural, amplitude-driven lip-sync** using the **Web Audio API**: an `AnalyserNode` computes the **RMS amplitude** of the live audio waveform and maps it to mouth/jaw animation every frame.
+- Futuristic **light-blue gradient stage** with **concentric halo rings** and **dynamic floating keyword cards** populated from web-scraped data.
+
+### 4. 🔊 Automated Summary Speech (Neural TTS)
+- High-fidelity speech synthesis via **GCP Text-to-Speech (Studio Voices)**.
+- **Automatic fallback to `gTTS`** for resilience when the primary provider is unavailable or rate-limited.
+- Audio is persisted in **AWS S3** (CDN-style delivery) and **MongoDB GridFS** (binary storage with metadata), ensuring durability and fast replay.
+
+### 5. 🌐 Web-Scraped Resource Enrichment
+- Integrates the **Serper API** to fetch real-world educational links from portals such as **Byju's, Vedantu, Toppr, and Aakash**.
+- Extracted keywords and links are surfaced inside the avatar stage and resource panels.
+
+### 6. 📝 Diagnostic Assessment & Evaluation
+- **Context-aware quiz generation** derived from the retrieved document content.
+- **LLM-based answer evaluation** with actionable feedback and targeted improvement pointers.
+- Progress persisted in MongoDB for longitudinal tracking.
+
+### 7. 🔐 Flexible Authentication
+- **Clerk Auth** (`@clerk/react`) for authenticated, cross-device profiles with session management.
+- **Guest mode** with **anonymous browser-scoped identities**, for zero-friction onboarding.
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+flowchart TB
+    subgraph Client["🖥️ Client (React 18 + TypeScript + Vite)"]
+        UI["UI Layer<br/>TailwindCSS · Lucide"]
+        AUTH["Clerk Auth / Guest Identity"]
+        AVATAR["3D Avatar Engine<br/>Three.js · GLTFLoader"]
+        AUDIO["Web Audio API<br/>AnalyserNode · RMS Lip-Sync"]
+        MIC["MediaRecorder<br/>Voice Capture"]
+    end
+
+    subgraph Server["⚙️ Backend (Python 3.11 + Flask)"]
+        API["REST API Layer<br/>CORS · Gunicorn"]
+        ROT["Groq Key Rotation<br/>Round-Robin Load Balancer"]
+        RAG["RAG Orchestrator"]
+        QUIZ["Quiz Generator & Evaluator"]
+        TTSV["TTS Service<br/>GCP Studio → gTTS Fallback"]
+        ENR["Resource Enrichment Service"]
+    end
+
+    subgraph External["☁️ External Services"]
+        GROQ["Groq API<br/>LLaMA 3 8B/70B · Whisper STT"]
+        PI["PageIndex<br/>Vectorless Retriever"]
+        SERPER["Serper API<br/>Web Search/Scrape"]
+        GCP["GCP Text-to-Speech"]
+    end
+
+    subgraph Storage["🗄️ Persistence"]
+        MONGO[("MongoDB<br/>Documents · Progress")]
+        GRID[("GridFS<br/>Audio Binaries")]
+        S3[("AWS S3<br/>Audio Delivery")]
+    end
+
+    UI --> AUTH
+    UI --> API
+    MIC --> API
+    API --> RAG
+    API --> QUIZ
+    API --> TTSV
+    API --> ENR
+    RAG --> PI
+    RAG --> ROT --> GROQ
+    QUIZ --> ROT
+    ENR --> SERPER
+    TTSV --> GCP
+    TTSV --> S3
+    TTSV --> GRID
+    API --> MONGO
+    S3 --> AUDIO
+    AUDIO --> AVATAR
+```
+
+### Architectural Principles
+
+- **Separation of concerns**: a decoupled SPA frontend and a stateless REST backend, deployed independently.
+- **Client-side compute offloading**: 3D rendering and lip-sync run in the browser, which keeps server cost and latency low.
+- **Provider resilience**: multi-key LLM rotation and TTS fallback chains remove single points of failure.
+- **Grounded generation**: retrieved context is injected into prompts so outputs stay tied to source material.
+
+---
+
+## 🔄 End-to-End Data Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Learner
+    participant FE as React Frontend
+    participant BE as Flask Backend
+    participant PI as PageIndex (RAG)
+    participant LLM as Groq LLaMA 3
+    participant TTS as GCP TTS / gTTS
+    participant ST as S3 + GridFS
+    participant SP as Serper API
+
+    U->>FE: Upload PDF / enter topic
+    FE->>BE: POST document / topic
+    BE->>PI: Build tree index of document
+    BE->>LLM: Generate curriculum + summary (with retrieved context)
+    BE->>SP: Fetch educational links & keywords
+    BE->>TTS: Synthesize summary speech
+    TTS-->>BE: Audio bytes
+    BE->>ST: Persist audio (S3 + GridFS)
+    BE-->>FE: Curriculum, summary, audio URL, resources
+
+    U->>FE: Click "Play Explanation"
+    FE->>FE: Decode audio → AnalyserNode → RMS → avatar mouth morph
+
+    U->>FE: Ask follow-up (voice or text)
+    FE->>BE: Audio / text query
+    BE->>LLM: Whisper STT (if voice)
+    BE->>PI: Retrieve relevant context
+    BE->>LLM: Generate grounded answer
+    BE-->>FE: Answer (+ optional speech)
+
+    U->>FE: Take diagnostic quiz
+    FE->>BE: Submit answers
+    BE->>LLM: Evaluate + generate feedback
+    BE-->>FE: Score, feedback, improvement pointers
+```
+
+---
+
+## 🔬 Deep Dive: Core Technical Innovations
+
+### 1. Vectorless RAG with PageIndex
+
+Conventional RAG chunks documents, embeds them, and runs approximate nearest-neighbor (ANN) search over a vector store. This approach can **fragment context** and lose document structure. LearnForge instead uses **PageIndex, a vectorless, reasoning-based retriever** that:
+
+- Builds a **hierarchical tree index** that mirrors the document's natural structure (chapters → sections → subsections).
+- Lets the LLM **reason over the tree** to locate relevant sections, which preserves **semantic coherence** and **traceability**.
+- Removes the need to host and maintain a separate **vector database** and embedding pipeline.
+
+### 2. Sub-Second Inference with Groq and Multi-Key Rotation
+
+- Inference runs on **Groq's LPU (Language Processing Unit)** infrastructure, which delivers very low **time-to-first-token (TTFT)** and high **tokens/second throughput**.
+- **Model routing**: the lightweight **LLaMA 3 8B** handles fast, simple tasks, while **LLaMA 3 70B** is reserved for complex reasoning and evaluation.
+- **API key round-robin rotation** (`GROQ_API_KEYS`, comma-separated) spreads load across multiple keys to mitigate **rate-limit (HTTP 429)** exhaustion and improve availability.
+
+### 3. Real-Time Audio-Reactive Lip-Sync (Client-Side)
+
+The avatar's lip-sync is **procedural** (no pre-baked phoneme or viseme timeline), so it works with any audio source:
+
+1. Audio is routed through the **Web Audio API** graph: `AudioContext → MediaElementSource → AnalyserNode → destination`.
+2. On every `requestAnimationFrame` tick, the time-domain waveform is read from the `AnalyserNode`.
+3. **Root Mean Square (RMS) amplitude** is computed:
+
+   ```
+   RMS = √( (1/N) · Σ xᵢ² )
+   ```
+
+4. The RMS value is **normalized, smoothed** (low-pass / exponential smoothing) and mapped to the avatar's **mouth/jaw morph targets (blend shapes)** within the **Three.js** render loop.
+
+**Why this matters**: zero server round-trips for animation, minimal latency, and no dependence on external lip-sync services.
+
+### 4. Resilient TTS Pipeline
+
+```
+GCP TTS (Studio Voices) ──fail/limit──▶ gTTS Fallback ──▶ S3 + GridFS ──▶ Client
+```
+
+- **Primary**: GCP Studio Voices for natural, high-fidelity prosody.
+- **Fallback**: `gTTS` guarantees audio is still produced if the primary provider errors out.
+- **Dual persistence**: **S3** for scalable delivery and **GridFS** for database-native binary storage with metadata and retrieval.
+
+### 5. Context-Aware Diagnostic Assessment
+
+- Quiz questions are **generated from retrieved document context** (not generic topic knowledge), so assessments match what the learner actually studied.
+- **LLM-as-evaluator** scores free-form responses and returns **structured, actionable feedback** with improvement pointers.
+
+### 6. Dual-Mode Identity (Clerk + Guest)
+
+- **Authenticated mode**: Clerk-managed sessions let progress sync across devices.
+- **Guest mode**: an anonymous **browser-generated identity** lets learners start instantly, which reduces onboarding friction and boosts conversion.
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend (`LearnFront`)
+
+| Technology | Role / Usage |
+| :--- | :--- |
+| **React 18 & TypeScript** | Component-based architecture with static type safety |
+| **Vite** | Lightning-fast HMR dev server and optimized production bundler |
+| **TailwindCSS** | Utility-first styling and responsive design system |
+| **Three.js & GLTFLoader** | WebGL 3D avatar rendering, scene graph, and animation loop |
+| **Web Audio API** | `AnalyserNode` waveform analysis for RMS-based lip-sync |
+| **Clerk Auth (`@clerk/react`)** | Authentication, session management, and user profiles |
+| **Lucide React** | Consistent, lightweight icon system |
+
+### Backend (`LearnBack`)
+
+| Technology | Role / Usage |
+| :--- | :--- |
+| **Python 3.11+ & Flask** | RESTful API server and background workers |
+| **Gunicorn** | Production WSGI HTTP server |
+| **Groq API** | LPU-accelerated LLaMA 3 inference and Whisper STT |
+| **MongoDB & GridFS (PyMongo)** | Document store for content, progress, and audio metadata, plus binary storage |
+| **PageIndex Vectorless Retriever** | Tree-structured document retrieval for contextual RAG |
+| **GCP Text-to-Speech / gTTS** | Neural speech synthesis with automatic fallback |
+| **AWS S3 (boto3)** | Cloud object storage and audio delivery |
+| **Serper API** | Web search/scraping for educational reference links |
+
+### AI / ML Layer
+
+| Capability | Technology |
+| :--- | :--- |
+| Large Language Models | LLaMA 3 8B & 70B (via Groq) |
+| Speech-to-Text (ASR) | Whisper (via Groq) |
+| Text-to-Speech | GCP Studio Voices, gTTS |
+| Retrieval | Vectorless, reasoning-based tree retrieval (PageIndex) |
+| Generation Strategy | Retrieval-Augmented Generation (RAG), prompt-grounded generation |
+
+---
+
+## 🔗 Repositories
+
+- **Frontend Repository (`LearnFront`)**: [https://github.com/Adarsh-griffin/FodgeLearnFront.git](https://github.com/Adarsh-griffin/FodgeLearnFront.git)
+- **Backend Repository (`LearnBack`)**: [https://github.com/Adarsh-griffin/FordgeLearnBE.git](https://github.com/Adarsh-griffin/FordgeLearnBE.git)
+
+---
+
+## ⚙️ Environment Configuration
+
+### Backend Environment Variables (`LearnBack/.env`)
+
+Create a `.env` file inside `LearnBack/`:
+
+```env
+# Groq API Keys (comma-separated for multi-key round-robin rotation)
+GROQ_API_KEYS=your_groq_api_key_1,your_groq_api_key_2
+
+# PageIndex API Key
+PAGEINDEX_API_KEY=your_pageindex_api_key
+
+# Serper Web Scraping API Key
+SERPER_API_KEY=your_serper_api_key
+
+# MongoDB Connection String & Target Database
+MONGO_URI=mongodb+srv://user:password@cluster.mongodb.net/
+MONGO_DB_NAME=LearnFodge
+
+# AWS S3 Storage Credentials
+AWS_ACCESS_KEY_ID=your_aws_access_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+AWS_REGION=ap-southeast-2
+AWS_S3_BUCKET=your_s3_bucket_name
+
+# Clerk Auth Public Key (matches frontend)
+CLERK_PUBLISHABLE_KEY=pk_test_...
+
+# Allowed Frontend Origins (comma-separated, used for CORS)
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080
+```
+
+| Variable | Purpose |
+| :--- | :--- |
+| `GROQ_API_KEYS` | Comma-separated keys enabling round-robin load balancing |
+| `PAGEINDEX_API_KEY` | Access to the PageIndex retrieval service |
+| `SERPER_API_KEY` | Web search/scrape for resource enrichment |
+| `MONGO_URI` / `MONGO_DB_NAME` | MongoDB connection and database target |
+| `AWS_*` | S3 credentials, region, and bucket for audio storage |
+| `CLERK_PUBLISHABLE_KEY` | Clerk instance identifier (must match frontend) |
+| `ALLOWED_ORIGINS` | CORS allow-list of trusted frontend origins |
+
+### Frontend Environment Variables (`LearnFront/.env`)
+
+```env
+# Clerk Auth Publishable Key
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
+
+# Backend API Base URL
+VITE_API_BASE_URL=http://localhost:5000
+```
+
+> ⚠️ **Never commit `.env` files or real API keys to version control.** Make sure `.env` is listed in `.gitignore`.
+
+---
+
+## 🚀 Setup & Installation
+
+### Prerequisites
+
+- **Node.js** v18.x or higher
+- **Python** v3.11.x or higher
+- **MongoDB**: Atlas cluster or local instance
+- **AWS S3 bucket** for audio storage
+- API keys for **Groq**, **PageIndex**, **Serper**, and (optionally) **GCP TTS**
+
+---
+
+### 1. Backend Setup (`LearnBack`)
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Adarsh-griffin/FordgeLearnBE.git
+   cd FordgeLearnBE
+   ```
+
+2. **Create and activate a virtual environment**:
+   ```bash
+   # Windows (PowerShell)
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+
+   # macOS / Linux
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+3. **Install Python dependencies**:
+   ```bash
+   pip install -r requirement.txt
+   ```
+
+4. **Verify environment setup**: ensure `LearnBack/.env` is configured with your API credentials.
+
+5. **Run the Flask backend server**:
+   ```bash
+   python test_groq.py
+   ```
+   The backend API starts on **`http://127.0.0.1:5000`**.
+
+---
+
+### 2. Frontend Setup (`LearnFront`)
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Adarsh-griffin/FodgeLearnFront.git
+   cd FodgeLearnFront
+   ```
+
+2. **Install Node.js dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Configure the environment file**: ensure `LearnFront/.env` contains `VITE_CLERK_PUBLISHABLE_KEY` and `VITE_API_BASE_URL`.
+
+4. **Start the development server**:
+   ```bash
+   npm run dev
+   ```
+   The app launches at **`http://localhost:5173`** (or `http://localhost:8080`).
+
+---
+
+## 💻 How to Run & Use the Application
+
+1. Start both the **backend** (`python test_groq.py`) and the **frontend** (`npm run dev`).
+2. Open `http://localhost:5173` in your browser.
+3. Click **"Get Started"** on the home page:
+   - **Sign in with Clerk** to sync learning progress across devices, **or**
+   - Click **"Continue as Guest"** to start immediately.
+4. **Upload a PDF** or **type a topic** (e.g., *Convolutional Neural Networks*).
+5. Explore the learning suite:
+   - 📘 **AI Summary**: automated text summary with high-quality voice audio.
+   - 🧑‍🏫 **3D Avatar**: click **"Play Explanation"** to watch real-time lip-synced audio explanations.
+   - 💬 **AI Tutor Chat**: ask follow-up questions by text or voice.
+   - 🧪 **Diagnostic Quizzes**: test your understanding with adaptive assessment questions.
+   - 🔗 **Resources**: browse curated links from top educational portals.
+
+---
+
+## 🌐 Deployment Guide (Render)
+
+### Deploying the Frontend (`LearnFront`)
+
+| Setting | Value |
+| :--- | :--- |
+| **Type** | Static Site |
+| **Build Command** | `npm install && npm run build` |
+| **Publish Directory** | `./dist/spa` |
+
+**Environment Variables**
+- `VITE_CLERK_PUBLISHABLE_KEY`: `pk_test_...`
+- `VITE_API_BASE_URL`: `https://your-backend-name.onrender.com`
+
+### Deploying the Backend (`LearnBack`)
+
+| Setting | Value |
+| :--- | :--- |
+| **Type** | Web Service (Python 3) |
+| **Start Command** | `gunicorn test_groq:app` (or `python test_groq.py`) |
+
+**Environment Variables**: add every variable from `LearnBack/.env`. After deploying the frontend, add its URL to `ALLOWED_ORIGINS` so CORS allows it.
+
+---
+
+## ⚖️ Design Decisions & Trade-offs
+
+| Decision | Rationale | Trade-off |
+| :--- | :--- | :--- |
+| **Vectorless RAG (PageIndex)** over vector DB | Preserves document structure, avoids embedding infrastructure | Depends on an external retrieval service |
+| **Client-side 3D avatar** | Zero server rendering cost, instant interactivity | Needs a WebGL-capable device |
+| **Procedural RMS lip-sync** over viseme timelines | Works with any audio source, no extra API calls | Less phonetically precise than viseme-based sync |
+| **Groq LPU inference** | Sub-second responses for natural conversation | Subject to provider rate limits (mitigated by key rotation) |
+| **TTS fallback chain** | High availability of audio features | Fallback voice quality is lower than Studio Voices |
+| **Guest mode** | Frictionless onboarding | Progress is browser-bound until the learner signs in |
+
+---
+
+## 🔒 Security & Privacy
+
+- **Secrets management**: all credentials live in environment variables, never in source control.
+- **CORS allow-listing**: `ALLOWED_ORIGINS` restricts which frontends can call the API.
+- **Managed authentication**: Clerk handles credential storage, sessions, and token handling.
+- **Anonymous guest identities**: no personal data is required to use the platform.
+- **Scoped cloud access**: use least-privilege **IAM policies** for the S3 bucket.
+
+---
+
+## 📈 Scalability & Performance
+
+- **Stateless API design** allows horizontal scaling behind a load balancer.
+- **Gunicorn multi-worker** serving increases request concurrency.
+- **Browser-side rendering** moves GPU-intensive work off the server.
+- **Object storage (S3)** offloads audio delivery from the application tier.
+- **Multi-key LLM rotation** raises effective throughput under rate limits.
+- **Model tiering (8B/70B)** balances cost, latency, and answer quality.
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] **Viseme-based lip-sync** for higher phonetic accuracy
+- [ ] **Multilingual tutoring** (STT, LLM, and TTS in regional languages)
+- [ ] **Spaced-repetition engine** driven by quiz performance
+- [ ] **Learner knowledge graph** for adaptive path planning
+- [ ] **Streaming responses (SSE/WebSocket)** for token-by-token tutor replies
+- [ ] **Teacher dashboard** with class-level analytics
+- [ ] **Response caching** (Redis) to cut repeated LLM calls
+- [ ] **Containerization** (Docker) and **CI/CD** pipelines
+
+---
+
+## 📜 License
+
+This project is open-source and available under the [MIT License](LICENSE).
